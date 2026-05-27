@@ -1,0 +1,13 @@
+Open four x64 Native Tools Command Prompt terminals:
+
+1) Simulator:
+   uv run TCPiceoryx2\tools\tcp_sim_src.py --streams rgb
+
+2) Decode + CUDA IPC ring + iceoryx2 metadata:
+   uv run TCPiceoryx2\producers\video_decode_iox2_publisher.py --ip 127.0.0.1 --streams rgb --num-slots 16
+
+3) OpenGL viewer:
+   uv run TCPiceoryx2\consumers\iox2_gl_viewer_pycuda.py --stream rgb
+
+4) Optional AI consumer:
+   uv run TCPiceoryx2\consumers\iox2_ai_consumer_torch.py --stream rgb --latest-only
