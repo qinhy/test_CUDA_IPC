@@ -8,27 +8,21 @@ from typing import Any
 
 import iceoryx2 as iox2
 
+from tool.iox_video_types import EncodedVideoSample, codec_name
 
-def _payload_to_bytes(payload: Any) -> bytes:
-    """Copy an iceoryx2 dynamic uint8 slice payload into Python bytes.
 
-    The Python iceoryx2 Slice object intentionally does not behave exactly like a
-    Python bytes-like object in every release.  The safe fallback is indexed copy.
-    """
-    n = payload.len()
-    if n <= 0:
+def _encoded_sample_to_bytes(msg: EncodedVideoSample) -> bytes:
+    """Copy the valid encoded payload bytes from an EncodedVideoSample."""
+    n = int(msg.payload_size)
+    cap = len(msg.payload)
+
+    if n < 0 or n > cap:
+        raise RuntimeError(f"invalid encoded payload_size: {n} > {cap}")
+
+    if n == 0:
         return b""
 
-    # Some versions expose an iterable/buffer-like wrapper. Try it first.
-    try:
-        out = bytes(payload)
-        if len(out) == n:
-            return out
-    except Exception:
-        pass
-
-    return bytes(int(payload[i]) & 0xFF for i in range(n))
-
+    return bytes(msg.payload[:n])
 
 class Iox2EncodedByteFeeder:
     """Blocking byte feeder for PyNvVideoCodec.CreateDemuxer.
@@ -66,7 +60,7 @@ class Iox2EncodedByteFeeder:
         self.node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
         self.service = (
             self.node.service_builder(iox2.ServiceName.new(service_name))
-            .publish_subscribe(iox2.Slice[ctypes.c_uint8])
+            .publish_subscribe(EncodedVideoSample)
             .open_or_create()
         )
         self.subscriber = self.service.subscriber_builder().create()
@@ -145,8 +139,8 @@ class Iox2EncodedByteFeeder:
             if sample is None:
                 return
 
-            payload = sample.payload()
-            chunk = _payload_to_bytes(payload)
+            msg = sample.payload().contents
+            chunk = _encoded_sample_to_bytes(msg)
             if not chunk:
                 continue
 
@@ -157,6 +151,13 @@ class Iox2EncodedByteFeeder:
             if self.verbose and self._samples % 300 == 0:
                 mib = self._bytes / (1024.0 * 1024.0)
                 print(
-                    f"[iox2-in:{self.service_name}] samples={self._samples} bytes={mib:.1f} MiB buffered={len(self._buffer)}",
+                    f"[iox2-in:{self.service_name}] "
+                    f"samples={self._samples} "
+                    f"bytes={mib:.1f} MiB "
+                    f"buffered={len(self._buffer)} "
+                    f"last_seq={msg.sequence_number} "
+                    f"codec={codec_name(msg.codec)} "
+                    f"{msg.width}x{msg.height} "
+                    f"keyframe={bool(msg.is_keyframe)}",
                     flush=True,
                 )

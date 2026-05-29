@@ -1,3 +1,5 @@
 /bin
 *.pyc
 /external
+/pycuda
+/_build_pycuda_gl
